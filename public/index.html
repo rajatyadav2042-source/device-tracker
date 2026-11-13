@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="hi"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Live Device Tracker</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+ *{box-sizing:border-box} body{margin:0;font-family:system-ui,sans-serif;display:flex;height:100vh}
+ #side{width:300px;overflow:auto;border-right:1px solid #ddd;background:#fafafa}
+ #side h1{font-size:16px;margin:0;padding:14px;background:#1f2937;color:#fff}
+ #conn{font-size:12px;padding:6px 14px;color:#555}
+ .dev{padding:10px 14px;border-bottom:1px solid #eee;cursor:pointer}
+ .dev:hover{background:#eef2ff} .dev b{display:block}
+ .dev small{color:#666} .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
+ .on{background:#16a34a}.off{background:#9ca3af}
+ #map{flex:1}
+ @media(max-width:700px){body{flex-direction:column-reverse}#side{width:100%;height:35%}}
+</style></head><body>
+<div id="side"><h1>📡 Live Device Tracker</h1><div id="conn">Connecting…</div><div id="list"></div></div>
+<div id="map"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const map = L.map('map').setView([26.8467, 80.9462], 12);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  {maxZoom: 19, attribution: '© OpenStreetMap'}).addTo(map);
+
+const items = {}; // id -> {marker, trail, data}
+const list = document.getElementById('list');
+const conn = document.getElementById('conn');
+let fitted = false;
+
+function upsert(d, trail) {
+  let it = items[d.id];
+  if (!it) {
+    const marker = L.marker([d.lat, d.lng]).addTo(map);
+    const line = L.polyline(trail || [], {color: '#2563eb', weight: 3, opacity: .6}).addTo(map);
+    const row = document.createElement('div');
+    row.className = 'dev';
+    row.onclick = () => map.setView(items[d.id].marker.getLatLng(), 16);
+    list.appendChild(row);
+    it = items[d.id] = {marker, line, row};
+  }
+  it.data = d;
+  it.marker.setLatLng([d.lat, d.lng]);
+  if (!trail) it.line.addLatLng([d.lat, d.lng]);
+  it.marker.bindPopup('');
+  const p = it.marker.getPopup(), box = document.createElement('div');
+  box.textContent = `${d.name} • ${d.speed} km/h`;
+  p.setContent(box);
+  render(it);
+}
+
+function render(it) {
+  const d = it.data;
+  it.row.replaceChildren();
+  const b = document.createElement('b'), dot = document.createElement('span');
+  dot.className = 'dot ' + (d.online ? 'on' : 'off');
+  b.append(dot, d.name);
+  const s = document.createElement('small');
+  s.textContent = `${d.online ? 'Online' : 'Offline'} • ${d.speed} km/h • 🔋${d.battery ?? '?'}% • ${new Date(d.ts).toLocaleTimeString()}`;
+  it.row.append(b, s);
+  it.marker.setOpacity(d.online ? 1 : 0.5);
+}
+
+function connect() {
+  const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+  ws.onopen = () => conn.textContent = '🟢 Live';
+  ws.onclose = () => { conn.textContent = '🔴 Disconnected, retrying…'; setTimeout(connect, 2000); };
+  ws.onmessage = e => {
+    const m = JSON.parse(e.data);
+    if (m.type === 'snapshot') {
+      m.devices.forEach(d => upsert(d, d.trail));
+      if (!fitted && m.devices.length) {
+        map.fitBounds(m.devices.map(d => [d.lat, d.lng]), {padding: [40, 40]}); fitted = true;
+      }
+    } else if (m.type === 'update') upsert(m.device);
+    else if (m.type === 'status') m.devices.forEach(d => items[d.id] && (items[d.id].data = d, render(items[d.id])));
+  };
+}
+connect();
+</script></body></html>

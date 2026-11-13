@@ -1,0 +1,8 @@
+{
+  "name": "device-tracker",
+  "version": "1.0.0",
+  "description": "Real-time device tracking system (Node.js + WebSocket + Leaflet)",
+  "main": "server.js",
+  "scripts": { "start": "node server.js", "simulate": "node simulator.js" },
+  "dependencies": { "express": "^4.19.2", "ws": "^8.18.0" }
+}

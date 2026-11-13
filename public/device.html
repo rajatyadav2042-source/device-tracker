@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="hi"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Share My Location</title>
+<style>body{font-family:system-ui;max-width:420px;margin:30px auto;padding:0 16px}
+input,button{width:100%;padding:12px;margin:6px 0;font-size:16px}
+button{background:#2563eb;color:#fff;border:0;border-radius:8px}
+#st{margin-top:14px;padding:10px;background:#f3f4f6;border-radius:8px}</style></head><body>
+<h2>📍 Is phone ki location share karo</h2>
+<p>Sirf jab aap "Start" dabaoge tabhi location bhejegi. "Stop" dabate hi band.</p>
+<input id="name" placeholder="Device ka naam (e.g. Rahul-Phone)">
+<input id="key" placeholder="API key (agar set hai)">
+<button id="go">Start sharing</button>
+<div id="st">Band hai</div>
+<script>
+let watch = null, last = 0;
+const st = document.getElementById('st'), go = document.getElementById('go');
+const id = localStorage.getItem('devId') || (localStorage.devId = 'ph-' + Math.random().toString(36).slice(2, 8));
+document.getElementById('name').value = localStorage.getItem('devName') || '';
+
+go.onclick = () => {
+  if (watch !== null) { navigator.geolocation.clearWatch(watch); watch = null; go.textContent = 'Start sharing'; st.textContent = 'Band hai'; return; }
+  const name = document.getElementById('name').value.trim() || id;
+  localStorage.devName = name;
+  const key = document.getElementById('key').value.trim();
+  go.textContent = 'Stop sharing';
+  watch = navigator.geolocation.watchPosition(async p => {
+    if (Date.now() - last < 3000) return; last = Date.now();
+    const battery = navigator.getBattery ? Math.round((await navigator.getBattery()).level * 100) : null;
+    try {
+      const r = await fetch('/api/location', { method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(key && { 'x-api-key': key }) },
+        body: JSON.stringify({ id, name, lat: p.coords.latitude, lng: p.coords.longitude,
+          speed: +((p.coords.speed || 0) * 3.6).toFixed(1), battery }) });
+      st.textContent = r.ok ? `🟢 Bhej raha hai • ${new Date().toLocaleTimeString()}` : '❌ Server error ' + r.status;
+    } catch { st.textContent = '❌ Network error'; }
+  }, e => st.textContent = '❌ ' + e.message, { enableHighAccuracy: true, maximumAge: 2000 });
+};
+</script></body></html>
